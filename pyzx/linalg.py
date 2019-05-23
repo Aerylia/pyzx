@@ -309,8 +309,7 @@ def find_minimal_sums(m):
         for index,l in combs.items():
             for k in range(max(index)+1,r):
                 #Unrolled xor_rows(combs[index],d[k])
-                row = [0 if v1==v2 else 1 for v1,v2 in zip(l,d[k])]
-                #row = xor_rows(combs[index],d[k])
+                row = xor_rows(l,d[k])]
                 if sum(row) == 1:
                     return (*index,k)
                 combs2[(*index,k)] = row
