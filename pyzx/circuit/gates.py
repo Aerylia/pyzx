@@ -297,7 +297,7 @@ class CZ(Gate):
     name = 'CZ'
     quippername = 'Z'
     qasm_name = 'cz'
-    qc_name = 'Z'
+    qc_name = 'CZ'
     def __init__(self, control, target):
         self.target = target
         self.control = control
