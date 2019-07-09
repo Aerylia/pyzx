@@ -280,7 +280,7 @@ class CNOT(Gate):
     name = 'CNOT'
     quippername = 'not'
     qasm_name = 'cx'
-    qc_name = 'Tof'
+    qc_name = 'cnot'
     def __init__(self, control, target):
         self.target = target
         self.control = control
@@ -360,7 +360,7 @@ class CX(CZ):
     name = 'CX'
     quippername = 'X'
     qasm_name = 'undefined'
-    qc_name = 'undefined'
+    qc_name = 'cx'
     def to_graph(self, g, labels, qs, rs):
         r = max(rs[self.target],rs[self.control])
         t = self.graph_add_node(g,labels, qs,2,self.target,r)
@@ -375,7 +375,7 @@ class CX(CZ):
 class SWAP(CZ):
     name = 'SWAP'
     quippername = 'undefined'
-    qasm_name = 'undefined'
+    qasm_name = 'swap'
 
     def to_basic_gates(self):
         c1 = CNOT(self.control, self.target)
@@ -390,7 +390,7 @@ class Tofolli(Gate):
     name = 'Tof'
     quippername = 'not'
     qasm_name = 'ccx'
-    qc_name = 'Tof'
+    qc_name = 'toffoli'
     def __init__(self, ctrl1, ctrl2, target):
         self.target = target
         self.ctrl1 = ctrl1
@@ -436,7 +436,7 @@ class CCZ(Tofolli):
     name = 'CCZ'
     quippername = 'Z'
     qasm_name = 'ccz'
-    qc_name = 'Z'
+    qc_name = 'undefined'
     def to_basic_gates(self):
         c1,c2,t = self.ctrl1, self.ctrl2, self.target
         return [CNOT(c2,t), T(t,adjoint=True),
