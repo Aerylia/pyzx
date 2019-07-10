@@ -376,7 +376,7 @@ class SWAP(CZ):
     name = 'SWAP'
     quippername = 'undefined'
     qasm_name = 'swap'
-
+    qc_name = 'swap'
     def to_basic_gates(self):
         c1 = CNOT(self.control, self.target)
         c2 = CNOT(self.target, self.control)
@@ -387,7 +387,7 @@ class SWAP(CZ):
             gate.to_graph(g, labels, qs,rs)
 
 class Tofolli(Gate):
-    name = 'Tof'
+    name = 'TOF'
     quippername = 'not'
     qasm_name = 'ccx'
     qc_name = 'toffoli'
