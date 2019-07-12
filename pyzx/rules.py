@@ -369,10 +369,21 @@ def match_pivot_boundary(g, matchf=None, num=-1):
     phases = g.phases()
     rs = g.rows()
     
-    edge_list = []
     consumed_vertices = set()
-    i = 0
+    all_boundary = g.inputs + g.outputs
     m = []
+    i = 0
+    if i>=num or candidates.size()==0: return m
+        
+    for bound in all_boundary:
+        neighbs = g.neighbours(bound)
+        if neighbs.size()!=1:
+            raise Exception("Boundary spider has {} neighbours".format(neighbs.size()))
+        w = neighbs[0]
+        if types[w] == 0: continue
+
+
+    
     while (num == -1 or i < num) and len(candidates) > 0:
         v = candidates.pop()
         if types[v] != 1 or phases[v] not in (0,1): continue
