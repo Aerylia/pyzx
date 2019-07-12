@@ -373,17 +373,17 @@ def match_pivot_boundary(g, matchf=None, num=-1):
     all_boundary = g.inputs + g.outputs
     m = []
     i = 0
-    if i>=num or candidates.size()==0: return m
-        
+    edge_list = []
     for bound in all_boundary:
+        if (num!=-1 and i>=num) or len(candidates)==0: return m
         neighbs = g.neighbours(bound)
-        if neighbs.size()!=1:
-            raise Exception("Boundary spider has {} neighbours".format(neighbs.size()))
+        if len(neighbs)!=1:
+            raise Exception("Boundary spider has {} neighbours".format(len(neighbs)))
         w = neighbs[0]
         if types[w] == 0: continue #bound connected to another boundary
         if w in consumed_vertices: continue
         w_neighbs = g.neighbours(w)
-        if w_neighbs.size() == 2: continue #no point in doing pivot boundary with an arity 2 spider adjacent to boundary
+        if len(w_neighbs) == 2: continue #no point in doing pivot boundary with an arity 2 spider adjacent to boundary
         boundary_counter = 0
         good_vert = True
         v = -1
@@ -399,7 +399,7 @@ def match_pivot_boundary(g, matchf=None, num=-1):
             if types[n] == 1 and phases[n] in (0,1): 
                 no_bounds = True
                 n_neighbs = g.neighbours(n)
-                if n_neighbs.size()==1: #w is a phase gadget
+                if len(n_neighbs)==1: #w is a phase gadget
                     good_vert = False
                     break
                 for n_n in n_neighbs:
@@ -419,59 +419,15 @@ def match_pivot_boundary(g, matchf=None, num=-1):
         g.update_phase_index(w,v1)
         edge_list.append((w,v2) if w<v2 else (v2,w))
         edge_list.append((v1,v2) if v1<v2 else (v2,v1))
-        for n in g.neighbours(v): consumed_vertices.add(n)
-        for n in g.neighbours(w): consumed_vertices.add(n)
+        for n in g.neighbours(v): 
+            consumed_vertices.add(n)
+            candidates.discard(n)
+        for n in g.neighbours(w):
+            consumed_vertices.add(n)
+            candidates.discard(n)
         
         m.append([v,w,[],[bound]])
         i += 1
-        for n in g.neighbours(v): candidates.discard(n)
-        for n in g.neighbours(w): candidates.discard(n)
-
-    
-    while (num == -1 or i < num) and len(candidates) > 0:
-        v = candidates.pop()
-        if types[v] != 1 or phases[v] not in (0,1): continue
-
-        good_vert = True
-        w = None
-        bound = None
-        for n in g.neighbours(v):
-            if types[n] == 0: # v is on the boundary
-                good_vert = False
-                break
-            if len(g.neighbours(n)) == 1: # v is a phase gadget
-                good_vert = False
-                break
-            if n in consumed_vertices:
-                good_vert = False
-                break
-            boundaries = [b for b in g.neighbours(n) if types[b]==0]
-            if len(boundaries) != 1: # n is not on the boundary
-                continue        #, or it is connected to both an input and an output
-            if phases[n] and phases[n].denominator == 2:
-                w = n
-                bound = boundaries[0]
-            if not w:
-                w = n
-                bound = boundaries[0]
-        if not good_vert or not w: continue
-        
-        if bound in g.inputs: mod = 0.5
-        else: mod = -0.5
-        v1 = g.add_vertex(1,-2,rs[w]+mod,phases[w])
-        v2 = g.add_vertex(1,-1,rs[w]+mod,0)
-        g.set_phase(w, 0)
-        g.update_phase_index(w,v1)
-        edge_list.append((w,v2) if w<v2 else (v2,w))
-        edge_list.append((v1,v2) if v1<v2 else (v2,v1))
-        for n in g.neighbours(v): consumed_vertices.add(n)
-        for n in g.neighbours(w): consumed_vertices.add(n)
-        
-        m.append([v,w,[],[bound]])
-        i += 1
-        for n in g.neighbours(v): candidates.discard(n)
-        for n in g.neighbours(w): candidates.discard(n)
-
     g.add_edges(edge_list,2)
     return m
 
