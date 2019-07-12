@@ -380,8 +380,52 @@ def match_pivot_boundary(g, matchf=None, num=-1):
         if neighbs.size()!=1:
             raise Exception("Boundary spider has {} neighbours".format(neighbs.size()))
         w = neighbs[0]
-        if types[w] == 0: continue
+        if types[w] == 0: continue #bound connected to another boundary
+        if w in consumed_vertices: continue
+        w_neighbs = g.neighbours(w)
+        if w_neighbs.size() == 2: continue #no point in doing pivot boundary with an arity 2 spider adjacent to boundary
+        boundary_counter = 0
+        good_vert = True
+        v = -1
+        for n in w_neighbs:
+            if n in consumed_vertices or n not in candidates:
+                good_vert = False
+                break
+            if types[n] == 0:
+                boundary_counter += 1
+                if boundary_counter > 1:
+                    good_vert = False
+                    break
+            if types[n] == 1 and phases[n] in (0,1): 
+                no_bounds = True
+                n_neighbs = g.neighbours(n)
+                if n_neighbs.size()==1: #w is a phase gadget
+                    good_vert = False
+                    break
+                for n_n in n_neighbs:
+                    if types[n_n] == 0:
+                        no_bounds = False
+                        break
+                if no_bounds:
+                    v = n
 
+        if v == -1 or not good_vert: continue  
+        
+        if bound in g.inputs: mod = 0.5
+        else: mod = -0.5
+        v1 = g.add_vertex(1,-2,rs[w]+mod,phases[w])
+        v2 = g.add_vertex(1,-1,rs[w]+mod,0)
+        g.set_phase(w, 0)
+        g.update_phase_index(w,v1)
+        edge_list.append((w,v2) if w<v2 else (v2,w))
+        edge_list.append((v1,v2) if v1<v2 else (v2,v1))
+        for n in g.neighbours(v): consumed_vertices.add(n)
+        for n in g.neighbours(w): consumed_vertices.add(n)
+        
+        m.append([v,w,[],[bound]])
+        i += 1
+        for n in g.neighbours(v): candidates.discard(n)
+        for n in g.neighbours(w): candidates.discard(n)
 
     
     while (num == -1 or i < num) and len(candidates) > 0:
