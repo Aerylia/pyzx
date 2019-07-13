@@ -376,7 +376,7 @@ def match_pivot_boundary(g, matchf=None, num=-1):
     edge_list = []
     for bound in all_boundary:
         if (num!=-1 and i>=num) or len(candidates)==0: return m
-        neighbs = g.neighbours(bound)
+        neighbs = list(g.neighbours(bound))
         if len(neighbs)!=1:
             raise Exception("Boundary spider has {} neighbours".format(len(neighbs)))
         w = neighbs[0]
