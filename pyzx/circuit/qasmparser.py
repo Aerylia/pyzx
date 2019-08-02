@@ -20,7 +20,7 @@ import math
 from fractions import Fraction
 
 from . import Circuit
-from .gates import qasm_gate_table
+from .gates import qasm_gate_table, ZPhase, XPhase
 
 class QASMParser(object):
     """Class for parsing QASM source files into circuit descriptions."""
@@ -54,7 +54,6 @@ class QASMParser(object):
             data = data[:i] + data[j+1:]
         #parse the regular commands
         commands = [s.strip() for s in data.split(";") if s.strip()]
-        gates = []
         for c in commands:
             self.gates.extend(self.parse_command(c, self.registers))
 
