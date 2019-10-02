@@ -32,6 +32,8 @@ def phase_to_s(a, t):
     if (a == 1 and t == 3): return ''
     if not isinstance(a, Fraction):
         a = Fraction(a)
+    if a.denominator > 10000:
+        return '{:.2}'.format(a*math.pi)
     ns = '' if a.numerator == 1 else str(a.numerator)
     ds = '' if a.denominator == 1 else '/' + str(a.denominator)
 
