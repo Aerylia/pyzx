@@ -1004,7 +1004,7 @@ def max_overlap(cz_matrix):
                 final_common_qbs = common_qbs
     return [overlapping_rows,final_common_qbs]
 
-## Currently broken!!
+
 def modified_extract(g, optimize_czs=True, quiet=True):
     """Given a graph put into semi-normal form by :func:`simplify.full_reduce`, 
     it extracts its equivalent set of gates into an instance of :class:`circuit.Circuit`.
