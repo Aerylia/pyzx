@@ -1,6 +1,22 @@
+# PyZX - Python library for quantum circuit rewriting 
+#        and optimisation using the ZX-calculus
+# Copyright (C) 2019 - Aleks Kissinger, John van de Wetering,
+#                      and Arianne Meijer-van de Griend
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import sys
-if __name__ == '__main__':
-    sys.path.append('..')
 from ..graph.graph import  Graph
 #from pyzx.graph.base import BaseGraph # TODO fix the right graph import - one of many - right backend etc
 
@@ -67,12 +83,15 @@ class Architecture():
     def visualize(self, filename=None):
         import networkx as nx
         import matplotlib.pyplot as plt
-        plt.switch_backend('agg')
+        #plt.switch_backend('agg')
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
         g = nx.Graph()
         g.add_nodes_from(self.vertices)
         g.add_edges_from(self.graph.edges())
-        nx.draw(g, with_labels=True, font_weight='bold')
+        nx.draw(g, ax=ax1, with_labels=True, font_weight='bold')
         if filename is None:
+            return ax1
             filename = self.name + ".png"
         plt.savefig(filename)
 
@@ -215,6 +234,131 @@ class Architecture():
                 # input("Note it down!")
                 break
         yield None
+
+    def rec_steiner_tree(self, start, nodes, usable_nodes, upper=True):
+        # Builds the steiner tree with start as root, contains at least nodes and at most useable_nodes
+        
+        # Calculate which nodes will be recursed on
+        rec_nodes = []
+        if not upper:
+            useable_vertices = [self.vertices[i] for i in usable_nodes]
+            root_adj = [self.graph.edge_st(edge)[1] for edge in self.graph.edges() if self.graph.edge_st(edge)[0] == self.vertices[start]] 
+            root_adj += [self.graph.edge_st(edge)[0] for edge in self.graph.edges() if self.graph.edge_st(edge)[1] == self.vertices[start]]
+            root_adj = set([v for v in root_adj if v in useable_vertices]) # remove forbidden or duplicated nodes
+            if len(root_adj) > 1: # Start is not a leaf
+                # Pick the adjacent vertex with the largest index in self.vertices
+                children = sorted([self.vertices.index(k) for k in root_adj], reverse=True)
+                # Pick all (grand)children connected to the adjacent vertex without using the previous edge
+                # Their indices in self.vertices are the rec_nodes.
+                # Due to the post-order DFS numbering system, we only need the indices of the root_adj vertices to do this.
+                rec_nodes = [i for i in range(children[1]+1, children[0])] + [start]
+                
+        # Calculate all-pairs shortest path
+        distances = {}
+        vertices = [self.vertices[i] for i in usable_nodes]
+        for edge in self.graph.edges():
+            src, tgt = self.graph.edge_st(edge)
+            if src in vertices and tgt in vertices:
+                if upper or (src in rec_nodes and tgt in rec_nodes):
+                    distances[(src, tgt)] = (1, [(src, tgt)])
+                    distances[(tgt, src)] = (1, [(tgt, src)])
+                elif src > tgt:
+                    distances[(src, tgt)] = (1, [(src, tgt)])
+                else:
+                    distances[(tgt, src)] = (1, [(tgt, src)])
+        for v in vertices:
+            distances[(v, v)] = (0, [])
+        for i, v0 in enumerate(vertices):
+            for j, v1 in enumerate(vertices if upper else vertices[:i + 1] + [x for x in rec_nodes if x < i and x in vertices]):
+                for v2 in vertices if upper else vertices[: i + j + 1] + [x for x in rec_nodes if x < i+j and x in vertices]:
+                    if (v0, v1) in distances.keys():
+                        if (v1, v2) in distances.keys():
+                            if (v0, v2) not in distances.keys() \
+                                    or distances[(v0, v2)][0] > distances[(v0, v1)][0] + distances[(v1, v2)][0]:
+                                distances[(v0, v2)] = (distances[(v0, v1)][0] + distances[(v1, v2)][0],
+                                                        distances[(v0, v1)][1] + distances[(v1, v2)][1])
+                                if upper:
+                                    distances[(v2, v0)] = (distances[(v0, v1)][0] + distances[(v1, v2)][0],
+                                                        distances[(v2, v1)][1] + distances[(v1, v0)][1])
+        # Build the spanning tree of shortest paths with root start, containing at least nodes
+        vertices = [start]
+        edges = []
+        steiner_pnts = []
+        while nodes != []:
+            options = [(node, v, *distances[(v, node)]) for node in nodes for v in (vertices + steiner_pnts) if
+                        (v, node) in distances.keys()]
+            best_option = min(options, key=lambda x: x[2])
+            vertices.append(best_option[0])
+            edges += best_option[3]
+            steiner = [v for edge in best_option[3] for v in edge if v not in vertices]
+            steiner_pnts += steiner
+            nodes.remove(best_option[0])
+        edges = list(set(edges)) #removes duplicates
+
+        # TODO adjust code below!!!
+        # Yield the steiner tree top-down
+        vs = {start}
+        n_edges = len(edges)
+        yielded_edges = set()
+        #debug_count = 0
+        #yield_count = 0
+        #warning = 0
+        while len(yielded_edges) < n_edges:
+            es = [e for e in edges for v in vs if e[0] == v]
+            old_vs = [v for v in vs]
+            #yielded = False
+            for edge in es:
+                yield edge
+                vs.add(edge[1])
+            #    if edge in yielded_edges:
+            #        print("DOUBLE yielding! - should not be possible!")
+                yielded_edges.add(edge)
+            #    yielded = True
+            #    yield_count += 1
+            [vs.remove(v) for v in old_vs]
+            #if not yielded:
+            #    debug and print("leaf!")
+            #    debug_count += 1
+            #    if debug_count > len(vertices):
+            #        print("infinite loop!", warning)
+            #        warning += 1
+            #if yield_count > len(edges):
+            #    print("Yielded more edges than existing... This should not be possible!", warning)
+            #    warning += 1
+            #if warning > 5:
+            #    print(state, yielded_edges)
+                # input("note it down")
+            #    break
+        yield None
+        # Walk the tree bottom up to remove all ones.
+        #yield_count = 0
+        while len(edges) > 0:
+            # find leaf nodes:
+            #debug and print(vertices, steiner_pnts, edges)
+            vs_to_consider = [vertex for vertex in vertices if vertex not in [e0 for e0, e1 in edges]] + \
+                                [vertex for vertex in steiner_pnts if vertex not in [e0 for e0, e1 in edges]]
+            #yielded = False
+            for v in vs_to_consider:
+                # Get the edge that is connected to this leaf node
+                for edge in [e for e in edges if e[1] == v]:
+                    yield edge
+                    edges.remove(edge)
+            #        yielded = True
+            #        yield_count += 1
+                    # yield map(lambda i: self.qubit_map[i], edge)
+            #if not yielded:
+            #    print("Infinite loop!", warning)
+            #    warning += 1
+            #if yield_count > n_edges:
+            #    print("Yielded more edges than existing again... This should not be possible!!", warning)
+            #    warning += 1
+            #if warning > 10:
+            #    print(state, edges, yield_count)
+                # input("Note it down!")
+            #    break
+        yield None
+        # Yield the rec_nodes
+        yield rec_nodes
 
 def dynamic_size_architecture_name(base_name, n_qubits):
     return str(n_qubits) + "q-" + base_name
@@ -463,6 +607,7 @@ def colored_print_9X9(np_array):
         print(np_array)
 
 if __name__ == '__main__':
+    sys.path.append('..')
     n_qubits = 25
     for name in dynamic_size_architectures:
         arch = create_architecture(name, n_qubits=n_qubits)
