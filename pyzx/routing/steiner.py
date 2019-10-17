@@ -18,6 +18,7 @@
 
 from . import architecture
 from ..linalg import Mat2
+import numpy as np # TODO remove after debugging
 
 debug = False
 
@@ -168,33 +169,38 @@ def rec_steiner_gauss(matrix, architecture, full_reduce=False, x=None, y=None, p
         debug and print("Step 3: profit")
         rec_nodes = next(steiner_tree)
         return rec_nodes
-    def rec_step(rows, cols):
+    def rec_step(cols, rows):
         size = len(rows)
         # Upper triangular form uses the same structure.
         p_cols = []
         pivot = 0
-        for i, c in enumerate(cols):#range(cols):
-            if pivot < size:#rows:
-                nodes = [r for r in rows[pivot:] if rows[pivot]==r or matrix.data[r][c] == 1]
-                steiner_reduce(c, rows[pivot], nodes, cols[i:], True)
-                if matrix.data[rows[pivot]][c] == 1:
+        rows2 = [r for r in range(len(matrix.data[0])) if r in rows]
+        cols2 = [c for c in range(len(matrix.data)) if c in cols]
+        for i, c in enumerate(cols2):
+            if pivot < size:
+                nodes = [r for r in rows2[pivot:] if rows2[pivot]==r or matrix.data[r][c] == 1]
+                steiner_reduce(c, rows2[pivot], nodes, cols2[i:], True)
+                if matrix.data[rows2[pivot]][c] == 1:
                     p_cols.append(c)
                     pivot += 1
-        debug and print("Upper triangle form", matrix.data)
-        #rank = pivot
-        debug and print(p_cols)
+        # Full reduce requires the recursion
         if full_reduce:
             pivot -= 1
-            for c in reversed(p_cols):
-                debug and print(pivot, [r[c] for r in matrix.data])
-                nodes = [r for r in rows[:pivot+1] if r==rows[pivot] or matrix.data[r][c] == 1]
-                if len(nodes) > 1:
-                    usable_nodes = [j for j in cols if j not in p_cols or p_cols.index(j) <= p_cols.index(c)]
-                    rec_nodes = steiner_reduce(c, rows[pivot], nodes, usable_nodes, False)
-                    print("rec nodes:",rec_nodes)
+            for i, c in enumerate(cols):
+                if c in p_cols:
+                    nodes = [r for r in rows if r==rows[pivot] or matrix.data[r][c] == 1]
+                    usable_nodes = cols[i:]
+                    rec_nodes = [n for n in usable_nodes if n >= c]
+                    rec_nodes = list(set([node for edge in architecture.distances["upper"][c][(max(usable_nodes),c)][1] for node in edge]))
+                        
+                    if len(nodes) > 1:
+                        steiner_reduce(c, rows[pivot], nodes, usable_nodes, False)
+                        
                     # Do recursion on the given nodes.
                     if len(rec_nodes) > 1:
-                        rec_step(rec_nodes, rec_nodes)
+                        rec_step(list(reversed(rec_nodes)), rec_nodes)
                 pivot -= 1
         #return rank
-    return rec_step([i for i in range(matrix.rows())], [i for i in range(matrix.cols())]) #start with the full matrix.
+    qubit_order = architecture.reduce_order
+    rec_step(qubit_order, list(reversed(qubit_order)))
+    

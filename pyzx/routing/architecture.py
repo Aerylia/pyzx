@@ -33,14 +33,16 @@ IBM_QX5 = "ibm_qx5"
 IBM_Q20_TOKYO = "ibm_q20_tokyo"
 RIGETTI_16Q_ASPEN = "rigetti_16q_aspen"
 RIGETTI_8Q_AGAVE = "rigetti_8q_agave"
+REC_ARCH = "recursive_architecture"
 
-architectures = [SQUARE, CIRCLE, FULLY_CONNNECTED, LINE, IBM_QX4, IBM_QX2, IBM_QX3, IBM_QX5, IBM_Q20_TOKYO, RIGETTI_8Q_AGAVE, RIGETTI_16Q_ASPEN]
+architectures = [SQUARE, CIRCLE, FULLY_CONNNECTED, LINE, IBM_QX4, IBM_QX2, IBM_QX3, 
+                IBM_QX5, IBM_Q20_TOKYO, RIGETTI_8Q_AGAVE, RIGETTI_16Q_ASPEN, REC_ARCH]
 dynamic_size_architectures = [FULLY_CONNNECTED, LINE, CIRCLE, SQUARE]
 
 debug = False
 
 class Architecture():
-    def __init__(self, name, coupling_graph=None, coupling_matrix=None, backend=None):
+    def __init__(self, name, coupling_graph=None, coupling_matrix=None, backend=None, reduce_order=None, **kwargs):
         """
         Class that represents the architecture of the qubits to be taken into account when routing.
 
@@ -66,6 +68,7 @@ class Architecture():
         self.pre_calc_distances()
         self.qubit_map = [i for i, v in enumerate(self.vertices)]
         self.n_qubits = len(self.vertices)
+        self.reduce_order = reduce_order if reduce_order is not None else [i-1 for i in range(self.n_qubits, 0,-1)]
 
     def pre_calc_distances(self):
         self.distances = {"upper": [self.floyd_warshall(until, upper=True) for until, v in enumerate(self.vertices)],
@@ -252,7 +255,8 @@ class Architecture():
                 # Their indices in self.vertices are the rec_nodes.
                 # Due to the post-order DFS numbering system, we only need the indices of the root_adj vertices to do this.
                 rec_nodes = [i for i in range(children[1]+1, children[0])] + [start]
-                
+            rec_nodes = [n for n in usable_nodes if n >= start]
+
         # Calculate all-pairs shortest path
         distances = {}
         vertices = [self.vertices[i] for i in usable_nodes]
@@ -268,9 +272,9 @@ class Architecture():
                     distances[(tgt, src)] = (1, [(tgt, src)])
         for v in vertices:
             distances[(v, v)] = (0, [])
-        for i, v0 in enumerate(vertices):
-            for j, v1 in enumerate(vertices if upper else vertices[:i + 1] + [x for x in rec_nodes if x < i and x in vertices]):
-                for v2 in vertices if upper else vertices[: i + j + 1] + [x for x in rec_nodes if x < i+j and x in vertices]:
+        for i, v0 in enumerate(vertices+vertices):
+            for j, v1 in enumerate(vertices): # if upper else vertices[:i + 1] + [x for x in rec_nodes if x < i and x in vertices]):
+                for v2 in vertices: # if upper else vertices[: i + j + 1] + [x for x in rec_nodes if x < i+j and x in vertices]:
                     if (v0, v1) in distances.keys():
                         if (v1, v2) in distances.keys():
                             if (v0, v2) not in distances.keys() \
@@ -287,6 +291,10 @@ class Architecture():
         while nodes != []:
             options = [(node, v, *distances[(v, node)]) for node in nodes for v in (vertices + steiner_pnts) if
                         (v, node) in distances.keys()]
+            if options == []:
+                print(nodes, vertices, edges, steiner_pnts, start, usable_nodes)
+                [print(k, v) for k,v in distances.items()]
+                print("")
             best_option = min(options, key=lambda x: x[2])
             vertices.append(best_option[0])
             edges += best_option[3]
@@ -537,6 +545,21 @@ def create_rigetti_8q_agave_architecture(**kwargs):
     ])
     return Architecture(RIGETTI_8Q_AGAVE, coupling_matrix=m, **kwargs)
 
+def create_recursive_architecture(**kwargs):
+    m = np.array([
+        #0  1  2  3  4  5  6  7  8
+        [0, 0, 1, 0, 0, 0, 0, 0, 0],#0
+        [0, 0, 1, 0, 0, 0, 0, 0, 0],#1
+        [1, 1, 0, 0, 0, 0, 0, 1, 0],#2
+        [0, 0, 0, 0, 0, 1, 0, 0, 0],#3
+        [0, 0, 0, 0, 0, 1, 0, 0, 0],#4
+        [0, 0, 0, 1, 1, 0, 0, 1, 0],#5
+        [0, 0, 0, 0, 0, 0, 0, 1, 0],#6
+        [0, 0, 1, 0, 0, 1, 1, 0, 1],#7
+        [0, 0, 0, 0, 0, 0, 0, 1, 0] #8
+    ])
+    return Architecture(name=REC_ARCH, coupling_matrix=m, reduce_order=[8,6,4,3,5,7,1,2,0], **kwargs)
+
 def create_fully_connected_architecture(n_qubits=None, **kwargs):
     if n_qubits is None:
         print("Warning: size is not given for the fully connected architecuture, using 9 as default.")
@@ -575,6 +598,8 @@ def create_architecture(name, **kwargs):
         return create_rigetti_16q_aspen_architecture(**kwargs)
     elif name == RIGETTI_8Q_AGAVE:
         return create_rigetti_8q_agave_architecture(**kwargs)
+    elif name == REC_ARCH:
+        return create_recursive_architecture(**kwargs)
     else:
         raise KeyError("name" + str(name) + "not recognized as architecture name. Please use one of", *architectures)
 

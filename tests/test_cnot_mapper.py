@@ -8,7 +8,7 @@ import numpy as np
 
 from pyzx.linalg import Mat2
 from pyzx.routing.cnot_mapper import gauss, STEINER_MODE, GAUSS_MODE, cnot_fitness_func
-from pyzx.routing.architecture import create_square_architecture
+from pyzx.routing.architecture import create_architecture, REC_ARCH, SQUARE
 from pyzx.parity_maps import CNOT_tracker, build_random_parity_map
 from pyzx.machine_learning import GeneticAlgorithm
 
@@ -18,8 +18,9 @@ class TestSteiner(unittest.TestCase):
 
     def setUp(self):
         self.n_qubits = 9
+        name = REC_ARCH
         self.n_tests = 5
-        self.arch = create_square_architecture(n_qubits=self.n_qubits)
+        self.arch = create_architecture(name, n_qubits=self.n_qubits)
         depth = 20
         self.circuit = [CNOT_tracker(self.arch.n_qubits) for _ in range(self.n_tests)]
         np.random.seed(SEED)
