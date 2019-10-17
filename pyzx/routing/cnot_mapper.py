@@ -12,8 +12,8 @@ import time
 
 from ..linalg import Mat2
 from .architecture import create_fully_connected_architecture, create_architecture, dynamic_size_architectures
-from ..parity_maps import CNOT_tracker
-from ..machine_learning import GeneticAlgorithm
+from .parity_maps import CNOT_tracker
+from .machine_learning import GeneticAlgorithm
 from ..utils import make_into_list
 #from .steiner import steiner_gauss
 from .steiner import rec_steiner_gauss as steiner_gauss
@@ -50,6 +50,8 @@ def cnot_fitness_func(mode, matrix, architecture, row=True, col=True, full_reduc
     :return: A fitness function that calculates the number of gates needed for a given permutation.
     """
     n_qubits = len(matrix.data)
+    if mode == GENETIC_STEINER_MODE: mode = STEINER_MODE
+    elif mode == GENETIC_GAUSS_MODE: mode = GAUSS_MODE
 
     def fitness_func(permutation):
         row_perm = permutation if row else np.arange(len(matrix.data))
