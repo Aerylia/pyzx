@@ -61,6 +61,8 @@ def basic_fitness_func(metric_func, mode, matrix, architecture, row=True, col=Tr
     :return: A fitness function that calculates the number of gates needed for a given permutation.
     """
     n_qubits = len(matrix.data)
+    if mode == GENETIC_STEINER_MODE: mode = STEINER_MODE
+    if mode == GENETIC_GAUSS_MODE: mode = GAUSS_MODE
 
     def fitness_func(permutation):
         row_perm = permutation if row else np.arange(len(matrix.data))
