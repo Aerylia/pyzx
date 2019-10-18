@@ -36,8 +36,19 @@ NO_COMPILER = "not_compiled"
 
 compiler_modes = [QUIL_COMPILER, NO_COMPILER]
 
+def depth_fitness_func(mode, matrix, architecture, row=True, col=True, full_reduce=True, **kwargs):
+    metric_func = lambda c: c.cnot_depth()
+    return basic_fitness_func(metric_func, mode, matrix, architecture, row, col, full_reduce, **kwargs)
 
 def cnot_fitness_func(mode, matrix, architecture, row=True, col=True, full_reduce=True, **kwargs):
+    metric_func = lambda c: c.count_cnots()
+    return basic_fitness_func(metric_func, mode, matrix, architecture, row, col, full_reduce, **kwargs)
+
+def combined_fitness_func(mode, matrix, architecture, row=True, col=True, full_reduce=True, **kwargs):
+    metric_func = lambda c: c.cnot_depth()*(architecture.n_qubits**3) + c.count_cnots()
+    return basic_fitness_func(metric_func, mode, matrix, architecture, row, col, full_reduce, **kwargs)
+
+def basic_fitness_func(metric_func, mode, matrix, architecture, row=True, col=True, full_reduce=True, **kwargs):
     """
     Creates and returns a fitness function to be used for the genetic algorithm that uses CNOT gate count as fitness.
 
@@ -50,8 +61,6 @@ def cnot_fitness_func(mode, matrix, architecture, row=True, col=True, full_reduc
     :return: A fitness function that calculates the number of gates needed for a given permutation.
     """
     n_qubits = len(matrix.data)
-    if mode == GENETIC_STEINER_MODE: mode = STEINER_MODE
-    elif mode == GENETIC_GAUSS_MODE: mode = GAUSS_MODE
 
     def fitness_func(permutation):
         row_perm = permutation if row else np.arange(len(matrix.data))
@@ -59,7 +68,7 @@ def cnot_fitness_func(mode, matrix, architecture, row=True, col=True, full_reduc
         circuit = CNOT_tracker(n_qubits)
         mat = Mat2([[matrix.data[r][c] for c in col_perm] for r in row_perm])
         gauss(mode, mat, architecture=architecture, y=circuit, full_reduce=full_reduce, **kwargs)
-        return circuit.count_cnots()
+        return metric_func(circuit)
 
     return fitness_func
 
@@ -128,7 +137,7 @@ def permutated_gauss(matrix, mode=None, architecture=None, population_size=30, c
     :return: Best permutation found, list of CNOTS corresponding to the elimination.
     """
     if fitness_func is None:
-        fitness_func =  cnot_fitness_func(mode, matrix, architecture, row=row, col=col, full_reduce=full_reduce, **kwargs)
+        fitness_func =  combined_fitness_func(mode, matrix, architecture, row=row, col=col, full_reduce=full_reduce, **kwargs)
     optimizer = GeneticAlgorithm(population_size, crossover_prob, mutate_prob, fitness_func)
     permsize = len(matrix.data) if row else len(matrix.data[0])
     best_permutation = optimizer.find_optimimum(permsize, n_iterations, continued=True)
@@ -289,6 +298,7 @@ def batch_map_cnot_circuits(source, modes, architectures, n_qubits=None, populat
     if len(metrics) > 0 and DataFrame is not None:
         df = DataFrame(metrics)
         print("Average gate count:", df["n_cnots"].mean())
+        print("Average gate depth:", df["depth"].mean())
         if os.path.exists(metrics_file): # append to the file - do not overwrite!
             df.to_csv(metrics_file, columns=get_metric_header(), header=False, index=False, mode='a')
         else:

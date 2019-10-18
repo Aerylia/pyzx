@@ -131,8 +131,8 @@ def rec_steiner_gauss(matrix, architecture, full_reduce=False, x=None, y=None, p
         debug and print("Reducing", c0, c1)
         if x != None: x.row_add(c0, c1)
         if y != None: y.col_add(c1, c0)
-    def steiner_reduce(col, root, nodes, usable_nodes, upper):
-        steiner_tree = architecture.rec_steiner_tree(root, nodes, usable_nodes, upper)
+    def steiner_reduce(col, root, nodes, usable_nodes, rec_nodes, upper):
+        steiner_tree = architecture.rec_steiner_tree(root, nodes, usable_nodes, rec_nodes, upper)
         # Remove all zeros
         next_check = next(steiner_tree)
         debug and print("Step 1: remove zeros")
@@ -167,8 +167,6 @@ def rec_steiner_gauss(matrix, architecture, full_reduce=False, x=None, y=None, p
             next_add = next(steiner_tree)
             debug and print(next_add)
         debug and print("Step 3: profit")
-        rec_nodes = next(steiner_tree)
-        return rec_nodes
     def rec_step(cols, rows):
         size = len(rows)
         # Upper triangular form uses the same structure.
@@ -179,7 +177,7 @@ def rec_steiner_gauss(matrix, architecture, full_reduce=False, x=None, y=None, p
         for i, c in enumerate(cols2):
             if pivot < size:
                 nodes = [r for r in rows2[pivot:] if rows2[pivot]==r or matrix.data[r][c] == 1]
-                steiner_reduce(c, rows2[pivot], nodes, cols2[i:], True)
+                steiner_reduce(c, rows2[pivot], nodes, cols2[i:], [], True)
                 if matrix.data[rows2[pivot]][c] == 1:
                     p_cols.append(c)
                     pivot += 1
@@ -190,11 +188,10 @@ def rec_steiner_gauss(matrix, architecture, full_reduce=False, x=None, y=None, p
                 if c in p_cols:
                     nodes = [r for r in rows if r==rows[pivot] or matrix.data[r][c] == 1]
                     usable_nodes = cols[i:]
-                    rec_nodes = [n for n in usable_nodes if n >= c]
                     rec_nodes = list(set([node for edge in architecture.distances["upper"][c][(max(usable_nodes),c)][1] for node in edge]))
                         
                     if len(nodes) > 1:
-                        steiner_reduce(c, rows[pivot], nodes, usable_nodes, False)
+                        steiner_reduce(c, rows[pivot], nodes, usable_nodes, rec_nodes, False)
                         
                     # Do recursion on the given nodes.
                     if len(rec_nodes) > 1:
