@@ -59,7 +59,7 @@ class GeneticAlgorithm():
         return np.random.choice(self.population_size, size=2, replace=False, p=selection_chance)
 
     def _create_population(self, n):
-        self.population = [np.random.permutation(n) for _ in range(self.population_size)]
+        self.population = [np.random.permutation(n) for _ in range(self.population_size)] # TODO remove duplicates from the population
         self.population = [(chromosome, self.fitness_func(chromosome)) for chromosome in self.population]
         self._sort(self.population)
         self.negative_population = self.population[-self.negative_population_size:]
@@ -81,14 +81,14 @@ class GeneticAlgorithm():
             
         for i in range(n_generations):
             self._update_population(n_child)
-            (not self.quiet) and print("Iteration", i, "best fitness:", [p[1] for p in self.population[:5]])
+            (not self.quiet) and print("Iteration", i, "best fitness:", [p for p in self.population[:5]])
         if partial_solution:
             return self.population[0] + initial_order[n_qubits:]
         return self.population[0][0]
 
     def _add_children(self, children):
         n_child = len(children)
-        self.population.extend([(child, self.fitness_func(child)) for child in children])
+        self.population.extend([(child, self.fitness_func(child)) for child in children if not (child.tolist() in [c[0].tolist() for c in self.population])])
         self._sort(self.population)
         self.negative_population.extend(self.population[-n_child:])
         self.negative_population = [self.negative_population[i] for i in np.random.choice(self.negative_population_size + n_child, size=self.negative_population_size, replace=False)]
@@ -134,7 +134,7 @@ class GeneticAlgorithm():
 class ParticleSwarmOptimization():
 
     def __init__(self, swarm_size, fitness_func, step_func, s_best_crossover, p_best_crossover, mutation, maximize=False):
-        self.fitness_func = fitness_func
+        #self.fitness_func = fitness_func
         self.step_func = step_func
         self.size = swarm_size
         self.s_crossover = s_best_crossover
@@ -144,7 +144,7 @@ class ParticleSwarmOptimization():
         self.maximize = maximize
 
     def _create_swarm(self, n):
-        self.swarm = [Particle(n, self.fitness_func, self.step_func, self.s_crossover, self.p_crossover, self.mutation, self.maximize, id=i) 
+        self.swarm = [Particle(n, self.step_func, self.s_crossover, self.p_crossover, self.mutation, self.maximize, id=i) 
                         for i in range(self.size)]
 
     def find_optimimum(self, n_qubits, n_steps, quiet=True):
@@ -163,13 +163,12 @@ class ParticleSwarmOptimization():
 
 class Particle():
 
-    def __init__(self, size, fitness_func, step_func, s_best_crossover, p_best_crossover, mutation, maximize=False, id=None):
-        self.fitness_func = fitness_func
+    def __init__(self, size, step_func, s_best_crossover, p_best_crossover, mutation, maximize=False, id=None):
         self.step_func = step_func
         self.size = size
         self.current = np.random.permutation(size)
         self.best_point = self.current
-        self.best = None#fitness_func(self.current)
+        self.best = None
         self.best_solution = None
         self.s_crossover = int(s_best_crossover*size)
         self.p_crossover = int(p_best_crossover*size)
@@ -194,7 +193,7 @@ class Particle():
             new = self._mutate(self.current)
             new = self._crossover(new, self.best_point, self.p_crossover)
             new = self._crossover(new, swarm_best.best_point, self.s_crossover)
-            # Sanity check
+            # Sanity check TODO can be removed!
             if any([i not in new for i in range(self.size)]): raise Exception("The new particle point is not a permutation anymore!" + str(self.current))
         self.current = new
         return is_better
