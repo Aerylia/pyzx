@@ -18,9 +18,23 @@
 
 import numpy as np
 
+
+def make_fitness_func(func, **func_args):
+    """
+    Creates and returns a fitness function to be used for the genetic algorithm that uses CNOT gate count as fitness.
+
+    :param func: a function determining the fitness of a single permutation
+    :param func_args: extra arguments for the fitness function
+    :return: A fitness function that only requires a permutation.
+    """
+    def fitness_func(permutation):
+        return func(permutation=permutation, **func_args)
+
+    return fitness_func
+
 class GeneticAlgorithm():
 
-    def __init__(self, population_size, crossover_prob, mutation_prob, fitness_func, maximize=False):
+    def __init__(self, population_size, crossover_prob, mutation_prob, fitness_func, maximize=False, quiet=True):
         self.population_size = population_size
         self.negative_population_size = int(np.sqrt(population_size))
         self.crossover_prob = crossover_prob
@@ -30,6 +44,7 @@ class GeneticAlgorithm():
         self.maximize = maximize
         self.n_qubits = 0
         self.population = None
+        self.quiet=quiet
 
     def _select(self):
         fitness_scores = [f for c,f in self.population]
@@ -63,9 +78,10 @@ class GeneticAlgorithm():
 
         if n_child is None:
             n_child = self.population_size
-
-        for _ in range(n_generations):
+            
+        for i in range(n_generations):
             self._update_population(n_child)
+            (not self.quiet) and print("Iteration", i, "best fitness:", [p[1] for p in self.population[:5]])
         if partial_solution:
             return self.population[0] + initial_order[n_qubits:]
         return self.population[0][0]
@@ -114,6 +130,97 @@ class GeneticAlgorithm():
         parent[gen1] = parent[gen2]
         parent[gen2] = _
         return parent
+
+class ParticleSwarmOptimization():
+
+    def __init__(self, swarm_size, fitness_func, step_func, s_best_crossover, p_best_crossover, mutation, maximize=False):
+        self.fitness_func = fitness_func
+        self.step_func = step_func
+        self.size = swarm_size
+        self.s_crossover = s_best_crossover
+        self.p_crossover = p_best_crossover
+        self.mutation = mutation
+        self.best_particle = None
+        self.maximize = maximize
+
+    def _create_swarm(self, n):
+        self.swarm = [Particle(n, self.fitness_func, self.step_func, self.s_crossover, self.p_crossover, self.mutation, self.maximize, id=i) 
+                        for i in range(self.size)]
+
+    def find_optimimum(self, n_qubits, n_steps, quiet=True):
+        self._create_swarm(n_qubits)
+        self.best_particle = self.swarm[0]
+        for i in range(n_steps):
+            self._update_swarm()
+            (not quiet) and print("Iteration", i, "best fitness:", self.best_particle.best, self.best_particle.best_point)
+        return self.best_particle.best_solution
+
+    def _update_swarm(self):
+        for p in self.swarm:
+            if p.step(self.best_particle) and self.best_particle.compare(p.best):
+                #print(p.best, self.best_particle.best)
+                self.best_particle = p
+
+class Particle():
+
+    def __init__(self, size, fitness_func, step_func, s_best_crossover, p_best_crossover, mutation, maximize=False, id=None):
+        self.fitness_func = fitness_func
+        self.step_func = step_func
+        self.size = size
+        self.current = np.random.permutation(size)
+        self.best_point = self.current
+        self.best = None#fitness_func(self.current)
+        self.best_solution = None
+        self.s_crossover = int(s_best_crossover*size)
+        self.p_crossover = int(p_best_crossover*size)
+        self.mutation = int(mutation*size)
+        self.maximize = maximize
+        self.id = id
+    
+    def compare(self, x):
+        if self.maximize:
+            return x > self.best
+        else:
+            return x < self.best 
+
+    def step(self, swarm_best):
+        new, solution, fitness = self.step_func(self.current)
+        is_better = self.best is None or self.compare(fitness)
+        if is_better:
+            self.best = fitness
+            self.best_point = self.current
+            self.best_solution = solution
+        elif all([self.current[i] == n for i, n in enumerate(new)]):
+            new = self._mutate(self.current)
+            new = self._crossover(new, self.best_point, self.p_crossover)
+            new = self._crossover(new, swarm_best.best_point, self.s_crossover)
+            # Sanity check
+            if any([i not in new for i in range(self.size)]): raise Exception("The new particle point is not a permutation anymore!" + str(self.current))
+        self.current = new
+        return is_better
+
+    def _mutate(self, particle):
+        new_particle = particle.copy()
+        m_idxs = np.random.choice(self.size, size=self.mutation, replace=False)
+        m_perm = np.random.permutation(self.mutation)
+        for old_i, new_i in enumerate(m_perm):
+            new_particle[m_idxs[old_i]] = particle[m_idxs[new_i]]
+        return new_particle
+
+    def _crossover(self, particle, best_particle, n):
+        cross_idxs = np.random.choice(self.size, size=n, replace=False)
+        new_particle = -1*np.ones_like(particle)
+        new_particle[cross_idxs] = best_particle[cross_idxs]
+        idx = 0
+        for i, gen in enumerate(new_particle):
+            if gen == -1: # skip over the parent1 part in child
+                while(particle[idx] in new_particle):
+                    idx += 1
+                    if idx == len(particle):
+                        break
+                if idx < len(particle):
+                    new_particle[i] = particle[idx]
+        return new_particle
 
 
 if __name__ == '__main__':
