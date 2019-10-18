@@ -12,8 +12,8 @@ import time
 
 from ..linalg import Mat2
 from .architecture import create_fully_connected_architecture, create_architecture, dynamic_size_architectures
-from .parity_maps import CNOT_tracker
-from .machine_learning import GeneticAlgorithm
+from ..parity_maps import CNOT_tracker
+from ..machine_learning import GeneticAlgorithm
 from ..utils import make_into_list
 #from .steiner import steiner_gauss
 from .steiner import rec_steiner_gauss as steiner_gauss
@@ -124,7 +124,7 @@ def gauss(mode, matrix, architecture=None, permutation=None, **kwargs):
         return rank
 
 def permutated_gauss(matrix, mode=None, architecture=None, population_size=30, crossover_prob=0.8, mutate_prob=0.2, n_iterations=50,
-                     row=True, col=True, full_reduce=True, fitness_func=None, x=None, y=None, **kwargs):
+                     row=True, col=True, full_reduce=True, fitness_func=None, x=None, y=None, quiet=True, **kwargs):
     """
     Finds an optimal permutation of the matrix to reduce the number of CNOT gates.
     
@@ -140,7 +140,7 @@ def permutated_gauss(matrix, mode=None, architecture=None, population_size=30, c
     """
     if fitness_func is None:
         fitness_func =  combined_fitness_func(mode, matrix, architecture, row=row, col=col, full_reduce=full_reduce, **kwargs)
-    optimizer = GeneticAlgorithm(population_size, crossover_prob, mutate_prob, fitness_func)
+    optimizer = GeneticAlgorithm(population_size, crossover_prob, mutate_prob, fitness_func,quiet=quiet)
     permsize = len(matrix.data) if row else len(matrix.data[0])
     best_permutation = optimizer.find_optimimum(permsize, n_iterations, continued=True)
 
