@@ -323,10 +323,11 @@ def find_minimal_sums(m):
             #raise ValueError("Irreducible input has been given")
         combs = combs2
 
+
 def greedy_reduction(m):
     """Returns a list of tuples (r1,r2) that specify which row should be added to which other row
     in order to reduce one row of m to only contain a single 1. 
-    Used in :func:`extract.streaming_extract`"""
+    Used in the circuit extraction algorithms as a more optimal alternative to Gaussian elimination"""
     indices = find_minimal_sums(m)
     if not isinstance(indices, (list,tuple)): return indices
     indices = list(indices)
@@ -354,78 +355,83 @@ def greedy_reduction(m):
     return result
 
 
+def permutation_as_swaps(perm):
+    """Returns a series of swaps the realises the given permutation. 
+    Permutation should be a dictionary with both keys and values taking values in 0,1,...,n."""
+    swaps = []
+    l = [perm[i] for i in range(len(perm))]
+    pinv = {v:k for k,v in perm.items()}
+    linv = [pinv[i] for i in range(len(pinv))]
+    for i in range(len(perm)):
+        if l[i] == i: continue
+        t1 = l[i]
+        t2 = linv[i]
+        swaps.append((i,t2))
+        #l[i] = i
+        #linv[i] = i
+        l[t2] = t1
+        linv[t1] = t2
+    return swaps
 
 def column_optimal_swap(m):
-    qubits = min([m.rows(), m.cols()])
-    connections = {i: set() for i in range(qubits)}
-    connectionsr= {j: set() for j in range(qubits)}
+    """Given a matrix m, tries to find a permutation of the columns such that
+    there are as many ones on the diagonal as possible. This improves performance
+    when doing Gaussian elimination."""
+    r, c = m.rows(), m.cols()
+    connections = {i: set() for i in range(r)}
+    connectionsr= {j: set() for j in range(c)}
 
-    for i in range(qubits):
-            for j in range(qubits):
+    for i in range(r):
+            for j in range(c):
                 if m.data[i][j]: 
                     connections[i].add(j)
                     connectionsr[j].add(i)
 
     target = _find_targets(connections, connectionsr)
-    target = {v:k for k,v in target.items()}
-    left = list(set(range(qubits)).difference(target.keys()))
-    right = list(set(range(qubits)).difference(target.values()))
+    if not target: target = dict()
+    #target = {v:k for k,v in target.items()}
+    left = list(set(range(c)).difference(target.values()))
+    right = list(set(range(c)).difference(target.keys()))
     for i in range(len(left)):
-        target[left[i]] = right[i]
+        target[right[i]] = left[i]
     return target
-
 
 def _find_targets(conn, connr, target={}):
     target = target.copy()
-    qubits = len(conn)
-    claimedr = set(target.values())
-    claimed = set(target.keys())
+    r = len(conn)
+    c = len(connr)
+    
+    claimedcols = set(target.keys())
+    claimedrows = set(target.values())
     
     while True:
         min_index = -1
         min_options = set(range(1000))
-        for i in range(qubits):
-            if i in claimed: continue
-            s = conn[i] - claimedr
-            for i2 in s.copy(): # Go trough the possible options
-                for j1 in (connr[i2] - claimed): 
-                    if j1 != i and j1 in target and i in connr[target[j1]]: # i connected to j2
-                        #This is not allowed
-                        #print("not allowed1:", i, i2)
-                        s.remove(i2)
-                        break
-            if len(s) == 0: return None # No possible options, start backtracking
+        for i in range(r):
+            if i in claimedrows: continue
+            s = conn[i] - claimedcols # The free columns
             if len(s) == 1:
                 j = s.pop()
-                #print("forced1", i,j)
-                target[i] = j
-                claimed.add(i)
-                claimedr.add(j)
+                target[j] = i
+                claimedcols.add(j)
+                claimedrows.add(i)
                 break
-            should_break = False
-            for i2 in s:
-                t = connr[i2] - claimed
-                for i1 in t.copy():
-                    for j1 in connr[i2]:
-                        if j1 != i1 and j1 in target and i1 in connr[target[j1]]: 
-                            #print("not allowed2:", i1, j1)
-                            t.remove(i1)
-                            break
-                if len(t) == 0: return None
-                if len(t) == 1: # we must connect them together
-                    i1 = t.pop()
-                    #print("forced2", i1,i2)
-                    target[i1] = i2
-                    claimed.add(i1)
-                    claimedr.add(i2)
-                    should_break = True
+            if len(s) == 0: return None # contradiction
+            found_col = False
+            for j in s:
+                t = connr[j] - claimedrows
+                if len(t) == 1: # j can only be connected to i
+                    target[j] = i
+                    claimedcols.add(j)
+                    claimedrows.add(i)
+                    found_col = True
                     break
-            if should_break: break
+            if found_col: break
             if len(s) < len(min_options):
                 min_index = i
                 min_options = s
-        else: # No forced decisions
-            if not (conn.keys() - claimed): # we are done
+        else: # Didn't find any forced choices
+            if not (conn.keys() - claimedrows): # we are done
                 return target
             if min_index == -1: raise ValueError("This shouldn't happen ever")
             # Start depth-first search
@@ -433,9 +439,8 @@ def _find_targets(conn, connr, target={}):
             #print("backtracking on", min_index)
             for i2 in min_options:
                 #print("trying option", i2)
-                tgt[min_index] = i2
+                tgt[i2] = min_index
                 r = _find_targets(conn, connr, tgt)
                 if r: return r
             #print("Unsuccessful")
             return target
-            

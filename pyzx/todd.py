@@ -33,8 +33,7 @@ except:
     np = None
 
 from .circuit.gates import T, S, Z, ZPhase, CZ, CNOT, ParityPhase
-from .linalg import Mat2, column_optimal_swap
-from .extract import permutation_as_swaps
+from .linalg import Mat2, permutation_as_swaps, column_optimal_swap
 from .phasepoly import parity_network
 
 # TOPT_LOCATION = ["../TOpt/bin/TOpt"]

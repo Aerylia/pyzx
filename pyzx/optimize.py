@@ -17,8 +17,8 @@
 
 from .circuit import Circuit
 from .circuit.gates import ZPhase, XPhase, CNOT, CZ, ParityPhase, NOT, HAD, SWAP, S, Z
-from .extract import permutation_as_swaps
 from .todd import todd_simp
+from .linalg import permutation_as_swaps
 
 __all__ = ['basic_optimization', 'phase_block_optimize']
 
@@ -57,6 +57,7 @@ def stats(circ):
         elif g.name != 'NOT' and g.phase != 1:
             non_pauli += 1
     return had, two_qubit, non_pauli
+
 
 class Optimizer:
     def __init__(self, circuit):
