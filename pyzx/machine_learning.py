@@ -17,7 +17,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
-
+from sortedcontainers import SortedSet
+from multiprocessing import Pool, cpu_count
+#from multiprocessing.pool import ThreadPool
 
 def make_fitness_func(func, **func_args):
     """
@@ -32,22 +34,53 @@ def make_fitness_func(func, **func_args):
 
     return fitness_func
 
+
+def make_child(GA):
+    if np.random.random() < GA.crossover_prob:
+        p1, p2 = GA._select()
+        #child = GA._crossover(GA.population[p1][0], GA.population[p2][0])
+        child = GA._crossover(GA.population[p1][1], GA.population[p2][1])
+        if np.random.random() < GA.mutation_prob:
+            child = GA._mutate(child)
+        return (GA.fitness_func(child), tuple(child)) 
+    return None
+
 class GeneticAlgorithm():
 
-    def __init__(self, population_size, crossover_prob, mutation_prob, fitness_func, maximize=False, quiet=True):
+    def __init__(self, population_size, crossover_prob, mutation_prob, fitness_func, maximize=False, quiet=True, n_threads=None):
         self.population_size = population_size
         self.negative_population_size = int(np.sqrt(population_size))
         self.crossover_prob = crossover_prob
         self.mutation_prob = mutation_prob
         self.fitness_func = fitness_func
-        self._sort = lambda l: l.sort(key=lambda x:x[1], reverse=maximize)
-        self.maximize = maximize
+        #self._sort = lambda l: l.sort(key=lambda x:x[1], reverse=maximize)
+        self.maximize = maximize # TODO adjust to work for maximization problems as well!
         self.n_qubits = 0
         self.population = None
         self.quiet=quiet
+        n_threads = min(n_threads, cpu_count()) if n_threads is not None else cpu_count()
+        if n_threads > 1: 
+            #print("GA CPUs:", n_threads)
+            self.pool = Pool(n_threads)
+        else:
+            self.pool = None
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Don't pickle baz
+        #del state["fitness_func"]
+        del state["pool"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Add baz back since it doesn't exist in the pickle
+        #self.fitness_func = None
+        self.pool = None
 
     def _select(self):
-        fitness_scores = [f for c,f in self.population]
+        #fitness_scores = [f for c,f in self.population]
+        fitness_scores = [f for f,c in self.population]
         total_fitness = sum(fitness_scores)
         if self.maximize:
             selection_chance = [f/total_fitness for f in fitness_scores]
@@ -56,15 +89,19 @@ class GeneticAlgorithm():
             adjusted_scores = [max_fitness - f for f in fitness_scores]
             adjusted_total = sum(adjusted_scores)
             selection_chance = [ f/adjusted_total for f in adjusted_scores]
-        return np.random.choice(self.population_size, size=2, replace=False, p=selection_chance)
+        return np.random.choice(len(self.population), size=2, replace=False, p=selection_chance)
 
     def _create_population(self, n):
-        self.population = [np.random.permutation(n) for _ in range(self.population_size)] # TODO remove duplicates from the population
-        self.population = [(chromosome, self.fitness_func(chromosome)) for chromosome in self.population]
-        self._sort(self.population)
+        self.population = [np.random.permutation(n) for _ in range(self.population_size-1)] + [np.arange(n)] # TODO remove duplicates from the population
+        self.population = [(self.fitness_func(chromosome), tuple(chromosome)) for chromosome in self.population]
+        #self.population = [(chromosome, self.fitness_func(chromosome)) for chromosome in self.population]
+        #print(self.population[-1])
+        #self._sort(self.population)
+        self.population = SortedSet(self.population)
+        #print(self.population[0])
         self.negative_population = self.population[-self.negative_population_size:]
 
-    def find_optimimum(self, n_qubits, n_generations, initial_order=None, n_child=None, continued=False):
+    def find_optimimum(self, n_qubits, n_generations, initial_order=None, n_child=None, continued=False, close_pool=True):
         self.n_qubits = n_qubits
         partial_solution = False
         if not continued or self.population is None:
@@ -81,33 +118,48 @@ class GeneticAlgorithm():
             
         for i in range(n_generations):
             self._update_population(n_child)
-            (not self.quiet) and print("Iteration", i, "best fitness:", [p for p in self.population[:5]])
+            (not self.quiet) and print("GA - Iteration", i, "best fitness:", [p for p in self.population[:5]])
         if partial_solution:
-            return self.population[0] + initial_order[n_qubits:]
-        return self.population[0][0]
+            return np.asarray(self.population[0][1] + initial_order[n_qubits:])
+            #return self.population[0][0] + initial_order[n_qubits:]
+        if close_pool and self.pool:
+            self.pool.close()
+            self.pool.join()
+        return np.asarray(self.population[0][1])
+        #return self.population[0][0]
 
     def _add_children(self, children):
-        n_child = len(children)
-        self.population.extend([(child, self.fitness_func(child)) for child in children if not (child.tolist() in [c[0].tolist() for c in self.population])])
-        self._sort(self.population)
-        self.negative_population.extend(self.population[-n_child:])
-        self.negative_population = [self.negative_population[i] for i in np.random.choice(self.negative_population_size + n_child, size=self.negative_population_size, replace=False)]
-        self.population = self.population[:self.population_size]
+        for child in children:
+            self.population.add(child)
+        #self.population.extend([(child, f) for child,f in children if not (child.tolist() in [c[0].tolist() for c in self.population])])
+        #self._sort(self.population)
+        n_too_many = len(self.population) - self.population_size
+        for _ in range(0, n_too_many):
+            self.negative_population.append(self.population.pop())
+        #n_child = len(self.population) - self.population_size
+        #self.negative_population.extend(self.population[-n_child:])
+        self.negative_population = [self.negative_population[i] for i in np.random.choice(len(self.negative_population), size=self.negative_population_size, replace=False)]
+        #self.population = self.population[:self.population_size]
 
     def _update_population(self, n_child):
         children = []
         # Create a child from weak parents to avoid local optima
         p1, p2 = np.random.choice(self.negative_population_size, size=2, replace=False)
-        child = self._crossover(self.negative_population[p1][0], self.negative_population[p2][0])
-        children.append(child)
-        for _ in range(n_child):
-            if np.random.random() < self.crossover_prob:
-                p1, p2 = self._select()
-                child = self._crossover(self.population[p1][0], self.population[p2][0])
-                if np.random.random() < self.mutation_prob:
-                    child = self._mutate(child)
-                children.append(child)
-        self._add_children(children)
+        #print(p1, p2, self.population_size, self.negative_population_size)
+        #child = self._crossover(self.negative_population[p1][0], self.negative_population[p2][0])
+        child = self._crossover(self.negative_population[p1][1], self.negative_population[p2][1])
+        #for _ in range(n_child):
+        #    child = make_child()
+        #    if child is not None:
+        #        children.append(child)
+        #print("CPUs:",multiprocessing.cpu_count())
+        #pool = multiprocessing.Pool(multiprocessing.cpu_count())
+        if self.pool:
+            children = self.pool.map(make_child, [self for _ in range(n_child)])
+        else:
+            children = list(map(make_child, [self for _ in range(n_child)]))
+        children.append((self.fitness_func(child), tuple(child)))
+        self._add_children([c for c in children if c is not None])
 
     def _crossover(self, parent1, parent2):
         crossover_start = np.random.choice(int(self.n_qubits/2))
@@ -131,9 +183,14 @@ class GeneticAlgorithm():
         parent[gen2] = _
         return parent
 
+def particle_update_func(args):
+    swarm_best, p = args
+    p.step(swarm_best)
+    return p
+
 class ParticleSwarmOptimization():
 
-    def __init__(self, swarm_size, fitness_func, step_func, s_best_crossover, p_best_crossover, mutation, maximize=False):
+    def __init__(self, swarm_size, fitness_func, step_func, s_best_crossover, p_best_crossover, mutation, maximize=False, n_threads=None):
         #self.fitness_func = fitness_func
         self.step_func = step_func
         self.size = swarm_size
@@ -142,24 +199,59 @@ class ParticleSwarmOptimization():
         self.mutation = mutation
         self.best_particle = None
         self.maximize = maximize
+        n_threads = min(n_threads, cpu_count()) if n_threads is not None else cpu_count()
+        if n_threads > 1: 
+            #print("PSO CPUs:", n_threads)
+            self.pool = Pool(n_threads)
+        else:
+            self.pool = None
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Don't pickle baz
+        #del state["fitness_func"]
+        del state["pool"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Add baz back since it doesn't exist in the pickle
+        #self.fitness_func = None
+        self.pool = None
 
     def _create_swarm(self, n):
         self.swarm = [Particle(n, self.step_func, self.s_crossover, self.p_crossover, self.mutation, self.maximize, id=i) 
                         for i in range(self.size)]
+        # Start with 1 particle with initial permutation
+        self.swarm[0].current = np.arange(n)
 
-    def find_optimimum(self, n_qubits, n_steps, quiet=True):
+    def find_optimimum(self, n_qubits, n_steps, quiet=True, close_pool=True):
         self._create_swarm(n_qubits)
         self.best_particle = self.swarm[0]
         for i in range(n_steps):
             self._update_swarm()
-            (not quiet) and print("Iteration", i, "best fitness:", self.best_particle.best, self.best_particle.best_point)
+            (not quiet) and print("PSO - Iteration", i, "best fitness:", self.best_particle.best, self.best_particle.best_point)
+        if close_pool and self.pool:
+            self.pool.close()
+            self.pool.join()
         return self.best_particle.best_solution
 
     def _update_swarm(self):
-        for p in self.swarm:
-            if p.step(self.best_particle) and self.best_particle.compare(p.best):
-                #print(p.best, self.best_particle.best)
-                self.best_particle = p
+        if self.pool is not None:
+            self.swarm = self.pool.map(particle_update_func, [(self.best_particle, p) for p in self.swarm])
+        else:
+            self.swarm = [particle_update_func((self.best_particle, p)) for p in self.swarm]
+        if self.maximize:
+            top = max(self.swarm, key=lambda p: p.best)
+        else:
+            top = min(self.swarm, key=lambda p: p.best)
+        if top.compare(self.best_particle.best):
+            self.best_particle = top
+            
+        #for p in self.swarm:
+        #    if p.step(self.best_particle) and self.best_particle.compare(p.best):
+        #        #print(p.best, self.best_particle.best)
+        #        self.best_particle = p
 
 class Particle():
 
@@ -177,14 +269,16 @@ class Particle():
         self.id = id
     
     def compare(self, x):
+        if x is None: 
+            return True
         if self.maximize:
-            return x > self.best
+            return x < self.best
         else:
-            return x < self.best 
+            return x > self.best 
 
     def step(self, swarm_best):
         new, solution, fitness = self.step_func(self.current)
-        is_better = self.best is None or self.compare(fitness)
+        is_better = self.best is None or not self.compare(fitness)
         if is_better:
             self.best = fitness
             self.best_point = self.current

@@ -22,6 +22,8 @@ The options for command are:
     opt    -- Optimise a circuit using PyZX
     tikz   -- Convert a circuit into a Tikz file
     mapper -- Map CNOT circuits onto restricted architectures
+    router -- Map any circuit onto restricted architectures
+    cnots  -- Generate random CNOT circuits 
 
 For help on the arguments for these commands run for instance 'python -m pyzx opt --help'
 """
@@ -32,7 +34,11 @@ if __name__ == '__main__':
     try:
         from .scripts import circ2circ
         from .scripts import circ2tikz
-        from .scripts import cnot_mapper
+        from .scripts import cnot2cnot
+        from .scripts import circuit_router
+        from .scripts import cnot_generator
+        from .scripts import phase_poly_generator
+        from .scripts import phase_poly_router
     except SystemError:
         print("Please run as a module by using 'python -m pyzx'")
         exit(1)
@@ -44,7 +50,7 @@ if __name__ == '__main__':
         parser.print_help()
         exit(1)
     args = parser.parse_args(sys.argv[1:2])
-    if args.command not in ('opt', 'tikz', 'mapper'):
+    if args.command not in ('opt', 'tikz', 'mapper', 'router', 'cnots', 'phasepoly'):
         print("Unrecognized command '{}'".format(args.command))
         parser.print_help()
         exit(1)
@@ -54,4 +60,11 @@ if __name__ == '__main__':
     if args.command == 'tikz':
         circ2tikz.main(sys.argv[2:])
     if args.command == 'mapper':
-        cnot_mapper.main(sys.argv[2:])
+        cnot2cnot.main(sys.argv[2:])
+    if args.command == 'router':
+        phase_poly_router.main(sys.argv[2:])
+    if args.command == 'cnots':
+        cnot_generator.main(sys.argv[2:])
+    if args.command == 'phasepoly':
+        phase_poly_generator.main(sys.argv[2:])
+

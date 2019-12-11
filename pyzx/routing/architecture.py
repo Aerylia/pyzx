@@ -31,18 +31,19 @@ IBM_QX3 = "ibm_qx3"
 IBM_QX4 = "ibm_qx4"
 IBM_QX5 = "ibm_qx5"
 IBM_Q20_TOKYO = "ibm_q20_tokyo"
+RIGETTI_19Q_ACORN = "rigetti_19q_acorn"
 RIGETTI_16Q_ASPEN = "rigetti_16q_aspen"
 RIGETTI_8Q_AGAVE = "rigetti_8q_agave"
 REC_ARCH = "recursive_architecture"
 
 architectures = [SQUARE, CIRCLE, FULLY_CONNNECTED, LINE, IBM_QX4, IBM_QX2, IBM_QX3, 
-                IBM_QX5, IBM_Q20_TOKYO, RIGETTI_8Q_AGAVE, RIGETTI_16Q_ASPEN, REC_ARCH]
+                IBM_QX5, IBM_Q20_TOKYO, RIGETTI_8Q_AGAVE, RIGETTI_16Q_ASPEN, RIGETTI_19Q_ACORN, REC_ARCH]
 dynamic_size_architectures = [FULLY_CONNNECTED, LINE, CIRCLE, SQUARE]
 
 debug = False
 
 class Architecture():
-    def __init__(self, name, coupling_graph=None, coupling_matrix=None, backend=None, reduce_order=None, **kwargs):
+    def __init__(self, name, coupling_graph=None, coupling_matrix=None, backend=None, qubit_map = None, reduce_order=None, **kwargs):
         """
         Class that represents the architecture of the qubits to be taken into account when routing.
 
@@ -66,7 +67,10 @@ class Architecture():
         else:
             self.vertices = [v for v in self.graph.vertices()]
         self.pre_calc_distances()
-        self.qubit_map = [i for i, v in enumerate(self.vertices)]
+        if qubit_map is not None:
+            self.qubit_map = qubit_map
+        else:
+            self.qubit_map = [i for i, v in enumerate(self.vertices)]
         self.n_qubits = len(self.vertices)
         self.reduce_order = reduce_order if reduce_order is not None else [i-1 for i in range(self.n_qubits, 0,-1)]
 
@@ -86,15 +90,12 @@ class Architecture():
     def visualize(self, filename=None):
         import networkx as nx
         import matplotlib.pyplot as plt
-        #plt.switch_backend('agg')
-        fig = plt.figure()
-        ax1 = fig.add_subplot(111)
+        plt.switch_backend('agg')
         g = nx.Graph()
         g.add_nodes_from(self.vertices)
         g.add_edges_from(self.graph.edges())
-        nx.draw(g, ax=ax1, with_labels=True, font_weight='bold')
+        nx.draw(g, with_labels=True, font_weight='bold')
         if filename is None:
-            return ax1
             filename = self.name + ".png"
         plt.savefig(filename)
 
@@ -240,7 +241,10 @@ class Architecture():
 
     def rec_steiner_tree(self, start, nodes, usable_nodes, rec_nodes, upper=True):
         # Builds the steiner tree with start as root, contains at least nodes and at most useable_nodes
-
+        start = self.qubit_map[start]
+        usable_nodes = [self.qubit_map[i] for i in usable_nodes]
+        nodes = [self.qubit_map[i] for i in nodes]
+        rec_nodes = [self.qubit_map[i] for i in rec_nodes]
         # Calculate all-pairs shortest path
         distances = {}
         vertices = [self.vertices[i] for i in usable_nodes]
@@ -275,6 +279,12 @@ class Architecture():
         while nodes != []:
             options = [(node, v, *distances[(v, node)]) for node in nodes for v in (vertices + steiner_pnts) if
                         (v, node) in distances.keys()]
+            if options == []:
+                print(nodes)
+                print(steiner_pnts, vertices)
+                print(distances)
+                print(usable_nodes)
+                print(rec_nodes)
             best_option = min(options, key=lambda x: x[2])
             vertices.append(best_option[0])
             edges += best_option[3]
@@ -290,7 +300,7 @@ class Architecture():
             es = [e for e in edges for v in vs if e[0] == v] # Find all vertices connected to previously yielded vertices
             old_vs = [v for v in vs]
             for edge in es: # yield the corresponding edges.
-                yield edge
+                yield (self.qubit_map.index(edge[0]), self.qubit_map.index(edge[1]))
                 vs.add(edge[1])
                 yielded_edges.add(edge)
             [vs.remove(v) for v in old_vs]
@@ -303,9 +313,15 @@ class Architecture():
             for v in vs_to_consider:
                 # Get the edge that is connected to this leaf node
                 for edge in [e for e in edges if e[1] == v]:
-                    yield edge # yield it
+                    yield (self.qubit_map.index(edge[0]), self.qubit_map.index(edge[1])) # yield it
                     edges.remove(edge) # Remove it from the steiner tree
         yield None # Signal done
+
+    def transpose(self):
+        # TODO make a transposed copy of self
+        qubit_map = list(reversed(self.qubit_map))
+        arch = Architecture(self.name + "_transpose", coupling_graph=self.graph, qubit_map=qubit_map)
+        return arch
 
 def dynamic_size_architecture_name(base_name, n_qubits):
     return str(n_qubits) + "q-" + base_name
@@ -462,6 +478,16 @@ def create_ibm_q20_tokyo_architecture(backend=None, **kwargs):
     graph.add_edges(edges)
     return Architecture(name=IBM_Q20_TOKYO, coupling_graph=graph, backend=backend, **kwargs)
 
+def create_rigetti_19q_acorn_architecture(backend=None, **kwargs):
+    graph = Graph(backend=backend)
+    vertices = graph.add_vertices(20)
+    edges = connect_vertices_in_line([vertices[i] for i in range(20) if i != 8])
+    extra_edges = [(8,9), (0,18), (2,16), (4,14), (6, 12)]
+    edges += [(vertices[v1], vertices[v2]) for v1, v2 in extra_edges]
+    graph.add_edges(edges)
+    return Architecture(RIGETTI_19Q_ACORN, coupling_graph=graph, reduce_order=[19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 8, 9, 7, 6, 5, 4, 3, 2, 1, 0], backend=backend, **kwargs)
+
+
 def create_rigetti_16q_aspen_architecture(backend=None, **kwargs):
     graph = Graph(backend=backend)
     vertices = graph.add_vertices(16)
@@ -533,6 +559,8 @@ def create_architecture(name, **kwargs):
         return create_ibm_qx5_architecture(**kwargs)
     elif name == IBM_Q20_TOKYO:
         return create_ibm_q20_tokyo_architecture(**kwargs)
+    elif name == RIGETTI_19Q_ACORN:
+        return create_rigetti_19q_acorn_architecture(**kwargs)
     elif name == RIGETTI_16Q_ASPEN:
         return create_rigetti_16q_aspen_architecture(**kwargs)
     elif name == RIGETTI_8Q_AGAVE:
@@ -572,10 +600,10 @@ def colored_print_9X9(np_array):
 
 if __name__ == '__main__':
     sys.path.append('..')
-    n_qubits = 25
-    for name in dynamic_size_architectures:
-        arch = create_architecture(name, n_qubits=n_qubits)
-        arch.visualize()
+    #n_qubits = 25
+    #for name in dynamic_size_architectures:
+    #    arch = create_architecture(name, n_qubits=n_qubits)
+    #    arch.visualize()
 
-    arch = create_architecture(IBM_Q20_TOKYO)
+    arch = create_architecture(RIGETTI_19Q_ACORN)
     arch.visualize()

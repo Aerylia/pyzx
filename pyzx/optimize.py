@@ -58,7 +58,6 @@ def stats(circ):
             non_pauli += 1
     return had, two_qubit, non_pauli
 
-
 class Optimizer:
     def __init__(self, circuit):
         self.circuit = circuit

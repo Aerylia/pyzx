@@ -32,13 +32,13 @@ class CNOT_tracker(Circuit):
         self.n_qubits = n_qubits
 
     def count_cnots(self):
-        return len([g for g in self.gates if hasattr(g, "name") and g.name == "CNOT"])
+        return len([g for g in self.gates if hasattr(g, "name") and g.name in ["CNOT", "CZ"]])
 
     def cnot_depth(self):
-        depth = 0
+        depth = 1
         previous_gates = []
         for g in self.gates:
-            if hasattr(g, "name") and g.name == "CNOT":
+            if hasattr(g, "name") and g.name in ["CNOT", "CZ"]:
                 if g.control in previous_gates or g.target in previous_gates: # Overlapping gate
                     # Start a new CNOT layer
                     previous_gates = [] 
@@ -50,6 +50,11 @@ class CNOT_tracker(Circuit):
     def row_add(self, q0, q1):
         self.add_gate("CNOT", q0, q1)
         self.matrix.row_add(q0, q1)
+
+    def add_gate(self, gate, *args, **kwargs):
+        if isinstance(gate, CNOT):
+            self.row_add(gate.control, gate.target)
+        super().add_gate(gate, *args, **kwargs)
 
     def col_add(self, q0, q1):
         self.prepend_gate("CNOT", q1, q0)
