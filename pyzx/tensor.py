@@ -23,6 +23,7 @@ try:
 except:
     np = None
 from math import pi, sqrt
+from .circuit import Circuit
 
 def Z_to_tensor(arity, phase):
     m = np.zeros([2]*arity, dtype = complex)
@@ -157,14 +158,18 @@ def tensor_to_matrix(t, inputs, outputs):
     return np.array(rows)
 
 def compare_tensors(t1,t2, preserve_scalar=True):
-    """Returns true if ``t1`` and ``t2`` are tensors equal up to a nonzero number.
+    """Returns true if ``t1`` and ``t2`` are tensors are equal.
+    If `preserve_scalar` is False, then equality is checked up to a nonzero number.
+    If both t1 and t2 are `Circuit`s then equality is always checked up to a nonzero number.
 
     Example: To check whether two ZX-graphs are semantically the same you would do::
 
         t1 = tensorfy(g1)
         t2 = tensorfy(g2)
-        compare_tensors(t1,t2) # True if g1 and g2 represent the same circuit
+        compare_tensors(t1,t2, preserve_scalar=False) # True if g1 and g2 represent the same circuit
     """
+    if isinstance(t1, Circuit) and isinstance(t2, Circuit):
+        preserve_scalar = False
     if not isinstance(t1, np.ndarray):
         t1 = t1.to_tensor(preserve_scalar)
     if not isinstance(t2, np.ndarray):
