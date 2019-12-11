@@ -116,7 +116,7 @@ def quipper_center_block(fname):
     f.close()
     i = text.find('Subroutine: "C"')
     if i == -1: 
-        i = text.find('Subroutine: "S1"')
+        i = text.find('Subroutine: "S')
         if i == -1: raise Exception("Not a valid format")
         text = text[i:].strip()
     else:
