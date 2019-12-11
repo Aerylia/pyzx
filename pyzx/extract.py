@@ -1107,8 +1107,6 @@ def modified_extract(g, optimize_czs=True, optimize_cnots=2, quiet=True):
             
         neighbours = list(neighbours)
         m = bi_adj(g,neighbours,frontier)
-        #print(m)
-        #print(m)
         if all(sum(row)!=1 for row in m.data): # No easy vertex
             if optimize_cnots>1:
                  greedy = greedy_reduction(m)
@@ -1151,10 +1149,18 @@ def modified_extract(g, optimize_czs=True, optimize_cnots=2, quiet=True):
             # these vertices aren't necessary.
             # So first, we get rid of all the CNOTs that happen in the Gaussian elimination after 
             # all the extractable vertices have become extractable
+            m2 = m.copy()
             for count, cnot in enumerate(cnots):
-                if sum(1 for row in m.data if sum(row)==1) == len(extractable): #extracable rows equal to maximum
+                if sum(1 for row in m2.data if sum(row)==1) == len(extractable): #extractable rows equal to maximum
                     cnots = cnots[:count] # So we do not need the remainder of the CNOTs
                     break
+                m2.row_add(cnot.target, cnot.control)
+            # We now recalculate which vertices were extractable, because the deleted cnots
+            # might have acted to swap this vertex around some.
+            extractable = set()
+            for i, row in enumerate(m2.data):
+                if sum(row) == 1:
+                    extractable.add(i)
             # And now we try to get rid of some more CNOTs, that can be commuted to the end of the CNOT circuit
             # without changing extractability.
             necessary_cnots = []
